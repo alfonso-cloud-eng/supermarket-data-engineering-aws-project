@@ -22,7 +22,12 @@ sc._jsc.hadoopConfiguration().set("fs.s3a.endpoint", "s3.us-east-1.amazonaws.com
 input_path = "s3://supermarket-data-bucket/dynamic-data/raw/past_transactions.csv"
 
 # Read the CSV data into a Spark DataFrame with header
-raw_df = spark.read.option("header", "true").csv(input_path)
+raw_df = spark.read \
+    .option("header", "true") \
+    .option("quote", "\"") \
+    .option("escape", "\"") \
+    .option("multiLine", "true") \
+    .csv(input_path)
 
 # Define a schema for the "items" JSON column
 items_schema = ArrayType(StructType([
@@ -35,12 +40,14 @@ raw_df = raw_df.withColumn("items", from_json(col("items"), items_schema))
 
 # Optional: Print schema for debugging
 raw_df.printSchema()
+raw_df.show(5, truncate=False)
 # Expected schema should show "items" as an array of structs
 
 # ---------------------------
 # 1. Create Transaction Header Table
 # ---------------------------
-header_df = raw_df.select("transaction_id", "supermarket_id", "transaction_date")
+header_df = raw_df.withColumn("transaction_date", col("transaction_date").cast("timestamp")) \
+                  .select("transaction_id", "supermarket_id", "transaction_date")
 
 # ---------------------------
 # 2. Create Transaction Detail Table
