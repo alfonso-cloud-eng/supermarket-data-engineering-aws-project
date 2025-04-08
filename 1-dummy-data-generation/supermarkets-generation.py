@@ -1,7 +1,7 @@
 import csv
 from faker import Faker
 
-def generate_supermarkets_csv(filename="supermarkets.csv", num_supermarkets=1500):
+def generate_supermarkets_csv(filename="supermarkets.csv", num_supermarkets=5):
     """
     Generates a CSV file with two columns:
         - supermarket_id: a unique identifier for each supermarket

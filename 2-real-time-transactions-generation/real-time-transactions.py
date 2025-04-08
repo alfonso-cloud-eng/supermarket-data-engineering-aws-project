@@ -83,7 +83,7 @@ def main():
         
         # Sleep a random interval between transactions to simulate real-time variation.
         # For example, 1 to 5 seconds. Adjust as needed for your use case.
-        time.sleep(random.uniform(0.1, 0.5))
+        time.sleep(random.uniform(60, 180))
 
 if __name__ == "__main__":
     main()

@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 # Constants
 NUM_TRANSACTIONS = 100000
-NUM_STORES = 1500
+NUM_STORES = 5
 NUM_SKUS = 12000
 
 # Weighted choices for quantity: most common is 1.
