@@ -14,4 +14,4 @@ RUN if [ -f requirements.txt ]; then pip install --no-cache-dir -r requirements.
 COPY . .
 
 # Command to run your Python script
-CMD ["python", "real-time-transactions.py"]
+CMD ["python", "-u", "real-time-transactions.py"]
