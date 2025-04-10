@@ -4,8 +4,9 @@ from awsglue.utils import getResolvedOptions
 from pyspark.context import SparkContext
 from awsglue.context import GlueContext
 from awsglue.job import Job
-from pyspark.sql.functions import col, explode, from_json, when
+from pyspark.sql.functions import col, explode, from_json
 from pyspark.sql.types import ArrayType, StructType, StructField, StringType, IntegerType, TimestampType
+import boto3
 
 ## @params: [JOB_NAME]
 args = getResolvedOptions(sys.argv, ['JOB_NAME'])
@@ -17,48 +18,43 @@ job = Job(glueContext)
 job.init(args['JOB_NAME'], args)
 
 # ------------------------------------------------------------------------------
-# 1. Paths: where the real-time logs are landing, and where the Parquet outputs go
+# 1. Paths: Define where the real-time logs live, where the outputs go, and where to archive
 # ------------------------------------------------------------------------------
 real_time_logs_path = "s3://supermarket-data-bucket/dynamic-data/real-time-raw/"
 output_header_path  = "s3://supermarket-data-bucket/dynamic-data/headers/"
 output_detail_path  = "s3://supermarket-data-bucket/dynamic-data/details/"
+archive_path        = "s3://supermarket-data-bucket/dynamic-data/archive-real-time-raw/"
 
 # ------------------------------------------------------------------------------
 # 2. Read the new line-based JSON logs from S3
 # ------------------------------------------------------------------------------
-# We assume each line is a JSON record with fields like:
-# { date, log, container_id, container_name, source, ecs_cluster, ecs_task_arn, ecs_task_definition, ... }
 raw_df = spark.read.json(real_time_logs_path)
 
 # ------------------------------------------------------------------------------
-# 3. Parse out the actual transaction JSON from the "log" column
+# 3. Parse out the transaction JSON from the "log" column
 # ------------------------------------------------------------------------------
-# We’ll define a schema for the transaction structure we expect to find inside "log"
 transaction_schema = StructType([
     StructField("transaction_id",   StringType(), True),
     StructField("supermarket_id",   StringType(), True),
     StructField("transaction_date", StringType(), True),
     StructField("items", ArrayType(
         StructType([
-            StructField("sku",      StringType(),  True),
+            StructField("sku",      StringType(), True),
             StructField("quantity", IntegerType(), True)
         ])
     ), True)
 ])
-
-# We'll create a new column "tx" by parsing the "log" field as JSON
+# Create a new column "tx" by parsing the "log" field as JSON
 parsed_df = raw_df.withColumn("tx", from_json(col("log"), transaction_schema))
 
 # ------------------------------------------------------------------------------
 # 4. Filter out rows that did NOT parse as a valid transaction
 # ------------------------------------------------------------------------------
-# If the line doesn't contain a valid transaction JSON, tx will be null
 parsed_df = parsed_df.filter(col("tx").isNotNull())
 
 # ------------------------------------------------------------------------------
 # 5. Build the 'headers' DataFrame
 # ------------------------------------------------------------------------------
-# Convert transaction_date into a proper timestamp
 headers_df = parsed_df.select(
     col("tx.transaction_id").alias("transaction_id"),
     col("tx.supermarket_id").alias("supermarket_id"),
@@ -68,13 +64,10 @@ headers_df = parsed_df.select(
 # ------------------------------------------------------------------------------
 # 6. Build the 'details' DataFrame
 # ------------------------------------------------------------------------------
-# Explode the items array so each SKU line becomes a separate record
 details_df = parsed_df.select(
     col("tx.transaction_id").alias("transaction_id"),
     explode(col("tx.items")).alias("item")
 )
-
-# Map the item fields
 details_df = details_df.select(
     "transaction_id",
     col("item.sku").alias("sku"),
@@ -82,10 +75,31 @@ details_df = details_df.select(
 )
 
 # ------------------------------------------------------------------------------
-# 7. Append the new data to your existing Parquet tables
+# 7. Append the new data to your historical Parquet tables
 # ------------------------------------------------------------------------------
-# You already have data in "headers/" and "details/". We'll append so we don't overwrite the historical data.
 headers_df.write.mode("append").parquet(output_header_path)
 details_df.write.mode("append").parquet(output_detail_path)
 
 job.commit()
+
+# ------------------------------------------------------------------------------
+# 8. Archive processed files: move files from real-time-raw to archive-real-time-raw
+# ------------------------------------------------------------------------------
+s3 = boto3.resource('s3')
+bucket_name = "supermarket-data-bucket"
+source_prefix = "dynamic-data/real-time-raw/"
+dest_prefix = "dynamic-data/archive-real-time-raw/"
+
+bucket = s3.Bucket(bucket_name)
+for obj in bucket.objects.filter(Prefix=source_prefix):
+    source_key = obj.key
+    # Create destination key by replacing the source prefix with the archive prefix
+    destination_key = source_key.replace(source_prefix, dest_prefix, 1)
+    copy_source = {
+        "Bucket": bucket_name,
+        "Key": source_key
+    }
+    # Copy the object to the archive folder
+    bucket.copy(copy_source, destination_key)
+    # Delete the original object from the source folder
+    obj.delete()
