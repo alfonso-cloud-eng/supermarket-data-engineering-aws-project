@@ -4,8 +4,8 @@ from awsglue.utils import getResolvedOptions
 from pyspark.context import SparkContext
 from awsglue.context import GlueContext
 from awsglue.job import Job
-from pyspark.sql.functions import col, explode, from_json
-from pyspark.sql.types import ArrayType, StructType, StructField, StringType, IntegerType
+from pyspark.sql.functions import col, explode, from_json, when
+from pyspark.sql.types import ArrayType, StructType, StructField, StringType, IntegerType, TimestampType
 
 ## @params: [JOB_NAME]
 args = getResolvedOptions(sys.argv, ['JOB_NAME'])
@@ -15,56 +15,77 @@ glueContext = GlueContext(sc)
 spark = glueContext.spark_session
 job = Job(glueContext)
 job.init(args['JOB_NAME'], args)
-sc._jsc.hadoopConfiguration().set("fs.s3a.endpoint", "s3.us-east-1.amazonaws.com")
 
+# ------------------------------------------------------------------------------
+# 1. Paths: where the real-time logs are landing, and where the Parquet outputs go
+# ------------------------------------------------------------------------------
+real_time_logs_path = "s3://supermarket-data-bucket/dynamic-data/real-time-raw/"
+output_header_path  = "s3://supermarket-data-bucket/dynamic-data/headers/"
+output_detail_path  = "s3://supermarket-data-bucket/dynamic-data/details/"
 
-# Input path for raw historical transactions in S3 (CSV format)
-input_path = "s3://supermarket-data-bucket/dynamic-data/raw/past_transactions.csv"
+# ------------------------------------------------------------------------------
+# 2. Read the new line-based JSON logs from S3
+# ------------------------------------------------------------------------------
+# We assume each line is a JSON record with fields like:
+# { date, log, container_id, container_name, source, ecs_cluster, ecs_task_arn, ecs_task_definition, ... }
+raw_df = spark.read.json(real_time_logs_path)
 
-# Read the CSV data into a Spark DataFrame with header
-raw_df = spark.read \
-    .option("header", "true") \
-    .option("quote", "\"") \
-    .option("escape", "\"") \
-    .option("multiLine", "true") \
-    .csv(input_path)
+# ------------------------------------------------------------------------------
+# 3. Parse out the actual transaction JSON from the "log" column
+# ------------------------------------------------------------------------------
+# We’ll define a schema for the transaction structure we expect to find inside "log"
+transaction_schema = StructType([
+    StructField("transaction_id",   StringType(), True),
+    StructField("supermarket_id",   StringType(), True),
+    StructField("transaction_date", StringType(), True),
+    StructField("items", ArrayType(
+        StructType([
+            StructField("sku",      StringType(),  True),
+            StructField("quantity", IntegerType(), True)
+        ])
+    ), True)
+])
 
-# Define a schema for the "items" JSON column
-items_schema = ArrayType(StructType([
-    StructField("sku", StringType(), True),
-    StructField("quantity", IntegerType(), True)
-]))
+# We'll create a new column "tx" by parsing the "log" field as JSON
+parsed_df = raw_df.withColumn("tx", from_json(col("log"), transaction_schema))
 
-# Parse the "items" column from a JSON string into an array of structs
-raw_df = raw_df.withColumn("items", from_json(col("items"), items_schema))
+# ------------------------------------------------------------------------------
+# 4. Filter out rows that did NOT parse as a valid transaction
+# ------------------------------------------------------------------------------
+# If the line doesn't contain a valid transaction JSON, tx will be null
+parsed_df = parsed_df.filter(col("tx").isNotNull())
 
-# Optional: Print schema for debugging
-raw_df.printSchema()
-raw_df.show(5, truncate=False)
-# Expected schema should show "items" as an array of structs
+# ------------------------------------------------------------------------------
+# 5. Build the 'headers' DataFrame
+# ------------------------------------------------------------------------------
+# Convert transaction_date into a proper timestamp
+headers_df = parsed_df.select(
+    col("tx.transaction_id").alias("transaction_id"),
+    col("tx.supermarket_id").alias("supermarket_id"),
+    col("tx.transaction_date").cast(TimestampType()).alias("transaction_date")
+)
 
-# ---------------------------
-# 1. Create Transaction Header Table
-# ---------------------------
-header_df = raw_df.withColumn("transaction_date", col("transaction_date").cast("timestamp")) \
-                  .select("transaction_id", "supermarket_id", "transaction_date")
+# ------------------------------------------------------------------------------
+# 6. Build the 'details' DataFrame
+# ------------------------------------------------------------------------------
+# Explode the items array so each SKU line becomes a separate record
+details_df = parsed_df.select(
+    col("tx.transaction_id").alias("transaction_id"),
+    explode(col("tx.items")).alias("item")
+)
 
-# ---------------------------
-# 2. Create Transaction Detail Table
-# ---------------------------
-# Explode the "items" array so that each item becomes a separate row
-detail_df = raw_df.select("transaction_id", explode("items").alias("item"))
-detail_df = detail_df.select("transaction_id", 
-                             col("item.sku").alias("sku"), 
-                             col("item.quantity").alias("quantity"))
+# Map the item fields
+details_df = details_df.select(
+    "transaction_id",
+    col("item.sku").alias("sku"),
+    col("item.quantity").alias("quantity")
+)
 
-# ---------------------------
-# 3. Write the DataFrames Back to S3 as Parquet files
-# ---------------------------
-output_header_path = "s3://supermarket-data-bucket/dynamic-data/headers/"
-output_detail_path = "s3://supermarket-data-bucket/dynamic-data/details/"
-
-header_df.write.mode("overwrite").parquet(output_header_path)
-detail_df.write.mode("overwrite").parquet(output_detail_path)
+# ------------------------------------------------------------------------------
+# 7. Append the new data to your existing Parquet tables
+# ------------------------------------------------------------------------------
+# You already have data in "headers/" and "details/". We'll append so we don't overwrite the historical data.
+headers_df.write.mode("append").parquet(output_header_path)
+details_df.write.mode("append").parquet(output_detail_path)
 
 job.commit()
