@@ -7,8 +7,8 @@ import pytz
 # Define the local timezone (UTC+2, e.g., Europe/Madrid).
 local_tz = pytz.timezone("Europe/Madrid")
 
-# Global transaction counter (or you can use a UUID instead).
-transaction_counter = 0
+# Initialize so that the first transaction is TX0100001
+transaction_counter = 100000
 
 def is_store_open(now):
     """
@@ -34,17 +34,17 @@ def generate_transaction():
     global transaction_counter
     transaction_counter += 1
 
-    # Transaction ID could also be a UUID, but here we'll just use a numeric counter.
+    # Ensure a 7-digit numeric portion, so 100001 => "0100001" => TX0100001.
     transaction_id = f"TX{transaction_counter:07d}"
 
-    # Pick a random store between STORE0001 and STORE1500
+    # Pick a random store between STORE0001 and STORE1500 (or 5 in your test).
     store_number = random.randint(1, 5)
     supermarket_id = f"STORE{store_number:04d}"
 
     # Get current datetime in the specified local timezone.
     transaction_date = datetime.now(local_tz).strftime("%Y-%m-%d %H:%M:%S")
 
-    # Randomly decide how many distinct SKUs are in this transaction
+    # Randomly decide how many distinct SKUs are in this transaction.
     num_items = random.randint(1, 20)
     items = []
     for _ in range(num_items):
@@ -76,7 +76,7 @@ def main():
 
         # Store is open: generate a transaction record.
         transaction = generate_transaction()
-        # Print the JSON representation to stdout.
+        # Print the JSON representation to stdout (or do whatever you like here).
         print(json.dumps(transaction, ensure_ascii=False))
         
         # Sleep a random interval between transactions to simulate real-time variation.
