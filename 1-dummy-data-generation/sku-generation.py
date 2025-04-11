@@ -1,8 +1,3 @@
-# This script generates a CSV file with 12,000 supermarket product SKUs, names, and prices.
-# Each SKU is unique and formatted as SKU00001, SKU00002, etc.
-# The product names are generated using a custom provider that creates realistic supermarket product names.
-# The prices are randomly generated between 0.50 and 100.00.
-
 import csv
 import random
 from faker import Faker
@@ -68,7 +63,10 @@ with open(filename, "w", newline="", encoding="utf-8") as csvfile:
     for i in range(1, 12001):
         sku = f"SKU{i:05d}"  # e.g., SKU00001, SKU00002, etc.
         name = fake.supermarket_product()
-        price = round(random.uniform(0.5, 100.0), 2)
+        # Use a beta distribution to skew prices towards the lower end.
+        # Here, random.betavariate(2, 5) generates a float between 0 and 1 with lower values more likely.
+        beta_value = random.betavariate(2, 5)
+        price = round(0.5 + beta_value * (100 - 0.5), 2)
         writer.writerow([sku, name, price])
 
 print(f"CSV file '{filename}' with 12,000 SKUs has been generated.")
