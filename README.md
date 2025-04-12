@@ -27,6 +27,8 @@ The main idea is to have a scalable, low-cost pipeline that can handle data from
    - When a new transaction shows up, it usually takes just 2–3 seconds for it to be processed and appear on the dashboard.
    - You can also use Athena for deeper queries, joining transaction data with SKUs and store info.
 
+   ![dashboard](/images/dashboard.png)
+
 ## 3. Historical / Static Data (Four Relational Tables)
 
 All past data is stored in an Amazon S3 bucket but organized as **four relational tables**. Athena can query them like standard database tables. Below is a rundown of each:
@@ -68,42 +70,42 @@ These last 2 tables get new data appended in real-time as transactions come in.
 This is how the relational database looks like:
 
 ```plaintext
-              +-------------------------------------+
+               +-------------------------------------+
               |           supermarkets              |
               +-------------------------------------+
-              | PK: store_id                        |
-              |     store_name                      |
-              |     store_location                  |
+              | store_id                            |
+              | store_name                          |
+              | store_location                      |
               +-------------------------------------+
                           ▲
-                          │  FK: store_id
+                          │
                           │
               +-------------------------------------+
               |           transactions              |
               +-------------------------------------+
-              | PK: transaction_id                  |
-              | FK: store_id                        |
-              |     transaction_datetime            |
+              | transaction_id                      |
+              | store_id                            |
+              | transaction_datetime                |
               +-------------------------------------+
                           ▲
-                          │  FK: transaction_id
+                          │
                           │
               +-------------------------------------+
               |         transaction_items           |
               +-------------------------------------+
-              | FK: transaction_id                  |
-              | FK: sku_id                          |
-              |     quantity                        |
+              | transaction_id                      |
+              | sku_id                              |
+              | quantity                            |
               +-------------------------------------+
                           ▲
-                          │  FK: sku_id
+                          │
                           │
               +-------------------------------------+
               |               skus                  |
               +-------------------------------------+
-              | PK: sku_id                          |
-              |     product_name                    |
-              |     price                           |
+              | sku_id                              |
+              | product_name                        |
+              | price                               |
               +-------------------------------------+
 ```
 
@@ -140,6 +142,8 @@ This process shows how near real-time ingestion is done with minimal fuss or cos
 Below is an **image of the QuickSight dashboard** (check your included image). It shows things like total sales by store, the top SKUs, and more. You can also filter by date in the dashboard.
 
 Even if transaction volume is high, this setup scales nicely to manage thousands of transactions per second with nearly instant analytics.
+
+![dashboard](/images/dashboard.png)
 
 ## 6. Cost and Scalability
 
