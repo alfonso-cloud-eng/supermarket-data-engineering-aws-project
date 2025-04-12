@@ -1,5 +1,6 @@
 import json
 import boto3
+import urllib.parse
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -17,13 +18,18 @@ def lambda_handler(event, context):
     try:
         for record in event.get('Records', []):
             bucket = record["s3"]["bucket"]["name"]
-            key = record["s3"]["object"]["key"]
+            # Decode the S3 key in case it's URL-encoded
+            raw_key = record["s3"]["object"]["key"]
+            key = urllib.parse.unquote(raw_key)
             logger.info("Processing file: s3://%s/%s", bucket, key)
             
-            # Get the file content from S3
-            s3_response = s3_client.get_object(Bucket=bucket, Key=key)
-            content = s3_response["Body"].read().decode("utf-8")
+            try:
+                s3_response = s3_client.get_object(Bucket=bucket, Key=key)
+            except Exception as e:
+                logger.error("Error getting object. Bucket: %s, Key: %s, Error: %s", bucket, key, e)
+                continue
 
+            content = s3_response["Body"].read().decode("utf-8")
             headers_list = []
             details_list = []
 
