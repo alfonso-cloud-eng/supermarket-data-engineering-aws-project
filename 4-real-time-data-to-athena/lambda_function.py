@@ -71,6 +71,9 @@ def lambda_handler(event, context):
             timestamp_suffix = int(time.time())
             if headers_list:
                 headers_df = pd.DataFrame(headers_list)
+                # Convert transaction_date column from string to datetime
+                if 'transaction_date' in headers_df.columns:
+                    headers_df['transaction_date'] = pd.to_datetime(headers_df['transaction_date'], errors='coerce')
                 headers_buffer = io.BytesIO()
                 table = pa.Table.from_pandas(headers_df)
                 pq.write_table(table, headers_buffer)
