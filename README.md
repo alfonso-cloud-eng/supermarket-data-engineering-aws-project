@@ -65,6 +65,48 @@ All past data is stored in an Amazon S3 bucket but organized as **four relationa
 
 These last 2 tables get new data appended in real-time as transactions come in.
 
+This is how the relational database looks like:
+
+```plaintext
+              +-------------------------------------+
+              |           supermarkets              |
+              +-------------------------------------+
+              | PK: store_id                        |
+              |     store_name                      |
+              |     store_location                  |
+              +-------------------------------------+
+                          ▲
+                          │  FK: store_id
+                          │
+              +-------------------------------------+
+              |           transactions              |
+              +-------------------------------------+
+              | PK: transaction_id                  |
+              | FK: store_id                        |
+              |     transaction_datetime            |
+              +-------------------------------------+
+                          ▲
+                          │  FK: transaction_id
+                          │
+              +-------------------------------------+
+              |         transaction_items           |
+              +-------------------------------------+
+              | FK: transaction_id                  |
+              | FK: sku_id                          |
+              |     quantity                        |
+              +-------------------------------------+
+                          ▲
+                          │  FK: sku_id
+                          │
+              +-------------------------------------+
+              |               skus                  |
+              +-------------------------------------+
+              | PK: sku_id                          |
+              |     product_name                    |
+              |     price                           |
+              +-------------------------------------+
+```
+
 ## 4. Dynamic / Real-Time Data Flow
 
 1. **Data Generation**
