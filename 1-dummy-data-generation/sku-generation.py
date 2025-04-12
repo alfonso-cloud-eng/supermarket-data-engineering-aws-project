@@ -40,7 +40,6 @@ class SupermarketProvider(BaseProvider):
                 "nouns": ["Chips", "Popcorn", "Cookies", "Nuts", "Crackers"]
             }
         }
-        # Randomly choose a category and then an adjective and noun from that category.
         category = self.random_element(elements=list(product_data.keys()))
         adjectives = product_data[category]["adjectives"]
         nouns = product_data[category]["nouns"]
@@ -53,20 +52,21 @@ fake.add_provider(SupermarketProvider)
 # Define the CSV filename
 filename = "skus.csv"
 
-# Open the CSV file for writing
 with open(filename, "w", newline="", encoding="utf-8") as csvfile:
     writer = csv.writer(csvfile)
-    # Write the header row
     writer.writerow(["sku", "name of article", "price"])
     
-    # Generate 12,000 rows of data
     for i in range(1, 12001):
-        sku = f"SKU{i:05d}"  # e.g., SKU00001, SKU00002, etc.
+        sku = f"SKU{i:05d}"
         name = fake.supermarket_product()
-        # Use a beta distribution to skew prices towards the lower end.
-        # Here, random.betavariate(2, 5) generates a float between 0 and 1 with lower values more likely.
-        beta_value = random.betavariate(2, 5)
-        price = round(0.5 + beta_value * (100 - 0.5), 2)
+        
+        # 90% chance to use a low price range (0.5 to 10€)
+        if random.random() < 0.9:
+            price = round(random.uniform(0.5, 10), 2)
+        else:
+            # 10% chance to have a higher price (10 to 100€)
+            price = round(random.uniform(10, 100), 2)
+            
         writer.writerow([sku, name, price])
 
 print(f"CSV file '{filename}' with 12,000 SKUs has been generated.")
