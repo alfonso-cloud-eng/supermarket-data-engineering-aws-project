@@ -27,7 +27,7 @@ The main idea is to have a scalable, low-cost pipeline that can handle data from
    - When a new transaction shows up, it usually takes just 2–3 seconds for it to be processed and appear on the dashboard.
    - You can also use Athena for deeper queries, joining transaction data with SKUs and store info.
 
-   ![dashboard](/images/dashboard.png)
+   ![dashboard](/images/supermarket-diagram.png)
 
 ## 3. Historical / Static Data (Four Relational Tables)
 
